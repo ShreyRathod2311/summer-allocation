@@ -30,11 +30,11 @@ async function isAdminUser(user) {
 }
 
 const DEFAULT_PROJECTS = [
-  { id: "p1", name: "Centricity-Wealth Management platform", description: " ", slots: 3 },
-  { id: "p2", name: "ER 1", description: " ", slots: 2 },
-  { id: "p3", name: "ER 2", description: " ", slots: 2 },
-  { id: "p4", name: "ER 3", description: " ", slots: 3 },
-  { id: "p5", name: "ER 4", description: " ", slots: 2 },
+  { id: "p1", name: "Centricity-Wealth Management platform", description: " ", slots: 3, sector: "Wealth Management" },
+  { id: "p2", name: "ER 1", description: " ", slots: 2, sector: "Industrials" },
+  { id: "p3", name: "ER 2", description: " ", slots: 2, sector: "Technology" },
+  { id: "p4", name: "ER 3", description: " ", slots: 3, sector: "Healthcare" },
+  { id: "p5", name: "ER 4", description: " ", slots: 2, sector: "Consumer" },
 ];
 
 function getLS(key, fallback) {
@@ -184,15 +184,19 @@ function StudentForm({ onAdminLink }) {
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
   const [leaveDays, setLeaveDays] = useState([]);
   const [contributions, setContributions] = useState("");
-  const [role, setRole] = useState("");
+  const [pitchedBefore, setPitchedBefore] = useState(false);
+  const [pitchNotes, setPitchNotes] = useState("");
+  const [pitchedSectors, setPitchedSectors] = useState([]);
   const [preferences, setPreferences] = useState({}); // { projectId: rank }
   const [availNote, setAvailNote] = useState("");
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
   const projects = getLS("projects", DEFAULT_PROJECTS);
+  const sectorOptions = [...new Set(projects.map(p => p.sector).filter(Boolean))];
 
   const toggleLeave = (iso) => {
     setLeaveDays(prev => prev.includes(iso) ? prev.filter(d => d !== iso) : [...prev, iso]);
@@ -209,13 +213,19 @@ function StudentForm({ onAdminLink }) {
     });
   };
 
+  const toggleSector = (sector) => {
+    setPitchedSectors(prev => (
+      prev.includes(sector) ? prev.filter(s => s !== sector) : [...prev, sector]
+    ));
+  };
+
   const validate = () => {
     const e = {};
     if (!name.trim()) e.name = "Full name is required.";
     if (!studentId.trim()) e.studentId = "Student ID is required.";
     if (!email.trim() || !email.includes("@")) e.email = "A valid email is required.";
+    if (!mobile.trim()) e.mobile = "Mobile number is required.";
     if (!contributions.trim()) e.contributions = "Please describe your contributions.";
-    if (!role) e.role = "Please select your primary role.";
     if (Object.keys(preferences).length === 0) e.preferences = "Please rank at least one project.";
     return e;
   };
@@ -227,8 +237,11 @@ function StudentForm({ onAdminLink }) {
       .map(([projectId, rank]) => ({ projectId, rank }))
       .sort((a, b) => a.rank - b.rank);
     const entry = {
-      id: uuid(), name: name.trim(), studentId: studentId.trim(), email: email.trim(),
-      leaveDays, contributions: contributions.trim(), role,
+      id: uuid(), name: name.trim(), studentId: studentId.trim(), email: email.trim(), mobile: mobile.trim(),
+      leaveDays, contributions: contributions.trim(),
+      pitchedBefore,
+      pitchNotes: pitchNotes.trim(),
+      pitchedSectors,
       preferences: prefs, availabilityNote: availNote.trim(),
       submittedAt: new Date().toISOString(),
     };
@@ -271,6 +284,16 @@ function StudentForm({ onAdminLink }) {
             <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={s.input} />
             <FieldError msg={errors.email} />
           </div>
+          <div>
+            <input
+              type="tel"
+              placeholder="Mobile Number"
+              value={mobile}
+              onChange={e => setMobile(e.target.value)}
+              style={s.input}
+            />
+            <FieldError msg={errors.mobile} />
+          </div>
         </div>
 
         {/* Section 2 — Leave Days */}
@@ -291,40 +314,86 @@ function StudentForm({ onAdminLink }) {
           <div>
             <textarea
               rows={4}
-              placeholder="Briefly describe your contributions from the previous semester — projects worked on, role, key outcomes."
+              placeholder="Briefly describe your contributions from the previous semester — projects worked on and key outcomes."
               value={contributions}
               onChange={e => setContributions(e.target.value)}
               style={{ ...s.input, resize: "vertical" }}
             />
             <FieldError msg={errors.contributions} />
           </div>
-          <div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {["Individual", "Team Lead", "Contributor"].map(r => (
-                <button
-                  key={r}
-                  onClick={() => setRole(r)}
-                  style={{
-                    padding: "6px 16px", fontSize: 13, borderRadius: 20, fontWeight: 400,
-                    background: role === r ? "var(--accent-light)" : "var(--surface)",
-                    border: `1px solid ${role === r ? "var(--accent)" : "var(--border)"}`,
-                    color: role === r ? "var(--accent)" : "var(--text-secondary)",
-                    transition: "all 0.15s",
-                  }}
-                >{r}</button>
-              ))}
-            </div>
-            <FieldError msg={errors.role} />
-          </div>
         </div>
 
-        {/* Section 4 — Project Preferences */}
+        {/* Section 4 — Stock Pitches */}
+        <div style={s.section}>
+          <span style={s.label}>Stock Pitches (Optional)</span>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={pitchedBefore}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setPitchedBefore(next);
+                if (!next) {
+                  setPitchNotes("");
+                  setPitchedSectors([]);
+                }
+              }}
+              style={{ width: 16, height: 16 }}
+            />
+            I have pitched a stock before
+          </label>
+
+          {pitchedBefore && (
+            <>
+              <textarea
+                rows={3}
+                placeholder="Share the company name, ticker, and a short summary of your pitch (optional)."
+                value={pitchNotes}
+                onChange={e => setPitchNotes(e.target.value)}
+                style={{ ...s.input, resize: "vertical" }}
+              />
+              {sectorOptions.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)", marginBottom: 8 }}>
+                    Pitched Sectors
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {sectorOptions.map(sector => (
+                      <button
+                        key={sector}
+                        type="button"
+                        onClick={() => toggleSector(sector)}
+                        style={{
+                          padding: "6px 12px", fontSize: 12, borderRadius: 16, fontWeight: 500,
+                          background: pitchedSectors.includes(sector) ? "var(--accent-light)" : "var(--surface)",
+                          border: `1px solid ${pitchedSectors.includes(sector) ? "var(--accent)" : "var(--border)"}`,
+                          color: pitchedSectors.includes(sector) ? "var(--accent)" : "var(--text-secondary)",
+                        }}
+                      >{sector}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Section 5 — Project Preferences */}
         <div style={s.section}>
           <span style={s.label}>Rank your top 3 project choices</span>
           <FieldError msg={errors.preferences} />
+          {pitchedBefore && pitchedSectors.length > 0 && (
+            <div style={{ fontSize: 12, color: "var(--accent)", marginTop: -6 }}>
+              Recommended based on your pitched sectors: {projects
+                .filter(p => pitchedSectors.includes(p.sector))
+                .map(p => p.name)
+                .join(", ") || "No matching projects yet."}
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {projects.map(p => {
               const ranked = preferences[p.id];
+              const recommended = pitchedBefore && pitchedSectors.includes(p.sector);
               return (
                 <div
                   key={p.id}
@@ -336,7 +405,14 @@ function StudentForm({ onAdminLink }) {
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 500 }}>{p.name}</div>
+                    <div style={{ fontSize: 15, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>{p.name}</span>
+                      {recommended && (
+                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "var(--accent-light)", color: "var(--accent)", fontWeight: 500 }}>
+                          Recommended
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>{p.description}</div>
                   </div>
                   <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
@@ -360,7 +436,7 @@ function StudentForm({ onAdminLink }) {
           </div>
         </div>
 
-        {/* Section 5 — Availability Note */}
+        {/* Section 6 — Availability Note */}
         <div style={s.section}>
           <span style={s.label}>Availability Note</span>
           <input
@@ -491,18 +567,17 @@ function AdminDashboard({ onSignOut }) {
   // Goals:
   //   1. Every project gets a balanced spread of availability (no clustering
   //      of all high-availability students in one project).
-  //   2. Every project gets at least one experienced student (Team Lead /
-  //      Contributor) as its "anchor", if one is available.
+  //   2. If a student pitched a stock in a sector and a matching project exists,
+  //      prioritize allocating them to that sector.
   //   3. Student preferences are respected as much as possible.
   //   4. Every student is allocated — no one left out as long as slots exist.
   //
-  // Approach — two-phase balanced assignment:
+  // Approach — three-phase balanced assignment:
   //
-  //   Phase 1 — Anchor pass:
-  //     For each project (sorted by fewest slots first), pick the single best
-  //     candidate who (a) ranked this project and (b) has the highest
-  //     experience tier. Among ties, prefer higher availability.
-  //     This guarantees each project gets an experienced anchor.
+  //   Phase 1 — Sector match pass:
+  //     For each student who pitched a sector, allocate them to the highest
+  //     ranked project in that sector (or any open project in that sector if
+  //     they did not rank it).
   //
   //   Phase 2 — Balanced fill pass (round-robin style):
   //     Sort remaining unallocated students by availability descending.
@@ -540,12 +615,15 @@ function AdminDashboard({ onSignOut }) {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     const availPct = (s) => (TOTAL_VACATION_DAYS - s.leaveDays.length) / TOTAL_VACATION_DAYS; // 0–1
-    const expTier = (s) => ({ "Team Lead": 3, "Contributor": 2, "Individual": 1 }[s.role] || 1);
-    const prefRank = (s, pid) => {
-      const p = s.preferences.find(p => p.projectId === pid);
-      return p ? p.rank : 99; // lower is better
+
+    const projectSectorById = {};
+    projects.forEach(p => { projectSectorById[p.id] = (p.sector || "").trim(); });
+
+    const matchesSector = (student, pid) => {
+      const sector = projectSectorById[pid];
+      const pitched = Array.isArray(student.pitchedSectors) ? student.pitchedSectors : [];
+      return !!sector && pitched.includes(sector);
     };
-    const hasRanked = (s, pid) => s.preferences.some(p => p.projectId === pid);
 
     // Average availability of current members in a project (0 if empty)
     const avgAvail = (pid) => {
@@ -560,27 +638,29 @@ function AdminDashboard({ onSignOut }) {
       projectMembers[pid].push(student.studentId);
     };
 
-    // ── Phase 1: Anchor pass ─────────────────────────────────────────────────
-    // For each project, find the best experienced student who ranked it.
-    // Process most-constrained projects (fewest slots) first.
-    const projectsBySlots = [...projects].sort((a, b) => a.slots - b.slots);
+    // ── Phase 1: Sector match pass ───────────────────────────────────────────
+    // If a student pitched a sector, place them in a matching project first.
     const stillUnalloc1 = [...unallocated];
 
-    for (const project of projectsBySlots) {
-      if (slots[project.id] <= 0) continue;
+    for (const student of stillUnalloc1) {
+      if (newAlloc[student.studentId]) continue;
+      const pitched = Array.isArray(student.pitchedSectors) ? student.pitchedSectors : [];
+      if (!pitched.length) continue;
 
-      // Candidates: unallocated, ranked this project
-      const candidates = stillUnalloc1.filter(s => !newAlloc[s.studentId] && hasRanked(s, project.id));
-      if (!candidates.length) continue;
+      const rankedMatches = student.preferences
+        .filter(p => slots[p.projectId] > 0 && matchesSector(student, p.projectId))
+        .sort((a, b) => a.rank - b.rank);
 
-      // Sort: experience tier desc, then availability desc, then preference rank asc
-      candidates.sort((a, b) =>
-        expTier(b) - expTier(a) ||
-        availPct(b) - availPct(a) ||
-        prefRank(a, project.id) - prefRank(b, project.id)
-      );
+      if (rankedMatches.length) {
+        allocate(student, rankedMatches[0].projectId);
+        continue;
+      }
 
-      allocate(candidates[0], project.id);
+      const openSectorProjects = projects.filter(p => slots[p.id] > 0 && matchesSector(student, p.id));
+      if (!openSectorProjects.length) continue;
+
+      openSectorProjects.sort((a, b) => avgAvail(a.id) - avgAvail(b.id));
+      allocate(student, openSectorProjects[0].id);
     }
 
     // ── Phase 2: Balanced fill pass ──────────────────────────────────────────
@@ -796,7 +876,7 @@ function StudentsPanel({ allocations, projectAllocations, projects }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Name", "Student ID", "Leave", "Availability", "Top Choice", "Role", ""].map((h, i) => (
+                {["Name", "Student ID", "Leave", "Availability", "Top Choice", ""].map((h, i) => (
                   <th key={i} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 500 }}>{h}</th>
                 ))}
               </tr>
@@ -827,12 +907,6 @@ function StudentsPanel({ allocations, projectAllocations, projects }) {
                         {topChoice ? getProjectName(topChoice.projectId) : "—"}
                       </td>
                       <td style={{ padding: "0 16px" }}>
-                        <span style={{
-                          fontSize: 12, padding: "2px 8px", borderRadius: 20,
-                          background: "var(--accent-light)", color: "var(--accent)",
-                        }}>{a.role}</span>
-                      </td>
-                      <td style={{ padding: "0 16px" }}>
                         <button
                           onClick={() => setExpanded(prev => ({ ...prev, [a.id]: !prev[a.id] }))}
                           style={{ fontSize: 13, color: "var(--accent)", background: "none" }}
@@ -841,7 +915,7 @@ function StudentsPanel({ allocations, projectAllocations, projects }) {
                     </tr>
                     {isExp && (
                       <tr key={`${a.id}-exp`} style={{ background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
-                        <td colSpan={7} style={{ padding: "16px 20px" }}>
+                        <td colSpan={6} style={{ padding: "16px 20px" }}>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
                             <div>
                               <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 6 }}>Contributions</div>
@@ -857,6 +931,18 @@ function StudentsPanel({ allocations, projectAllocations, projects }) {
                                   </div>
                                 ))}
                               </div>
+                              {Array.isArray(a.pitchedSectors) && a.pitchedSectors.length > 0 && (
+                                <>
+                                  <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 6, marginTop: 12 }}>Pitched Sectors</div>
+                                  <div style={{ fontSize: 13 }}>{a.pitchedSectors.join(", ")}</div>
+                                </>
+                              )}
+                              {a.pitchNotes && (
+                                <>
+                                  <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 6, marginTop: 12 }}>Stock Pitch Notes</div>
+                                  <div style={{ fontSize: 13 }}>{a.pitchNotes}</div>
+                                </>
+                              )}
                               <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 6, marginTop: 12 }}>Leave Days</div>
                               <div style={{ fontSize: 13 }}>{dateRanges(a.leaveDays)}</div>
                               {a.availabilityNote && (
@@ -891,13 +977,6 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
     allocations.filter(a => projectAllocations[a.studentId] === projectId);
 
   const availPct = (a) => Math.round(((TOTAL_VACATION_DAYS - a.leaveDays.length) / TOTAL_VACATION_DAYS) * 100);
-  const expTier = (a) => ({ "Team Lead": 3, "Contributor": 2, "Individual": 1 }[a.role] || 1);
-
-  // The "anchor" for a project = highest expTier, then highest availability
-  const getAnchor = (students) => {
-    if (!students.length) return null;
-    return [...students].sort((a, b) => expTier(b) - expTier(a) || availPct(b) - availPct(a))[0];
-  };
 
   const prefLabel = (student, projectId) => {
     const p = student.preferences.find(p => p.projectId === projectId);
@@ -909,14 +988,10 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
     };
   };
 
-  const roleStyle = (role) => ({
-    "Team Lead":   { bg: "#FFF7ED", color: "#C2620A" },
-    "Contributor": { bg: "var(--accent-light)", color: "var(--accent)" },
-    "Individual":  { bg: "var(--bg)", color: "var(--text-secondary)" },
-  }[role] || { bg: "var(--bg)", color: "var(--text-secondary)" });
-
-  const allocationNote = (student, projectId, isAnchor) => {
-    if (isAnchor) return "Anchor placement";
+  const allocationNote = (student, projectId) => {
+    const sector = projects.find(p => p.id === projectId)?.sector;
+    const pitched = Array.isArray(student.pitchedSectors) ? student.pitchedSectors : [];
+    if (sector && pitched.includes(sector)) return "Sector match";
     const p = student.preferences.find(pref => pref.projectId === projectId);
     if (!p) return "Fallback placement";
     return `Ranked choice #${p.rank}`;
@@ -952,14 +1027,14 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
       if (members.length === 0) {
         lines.push("- Open slot");
       } else {
-        members.forEach(m => lines.push(`- ${m.name} (${m.studentId})`));
+        members.forEach(m => lines.push(`- ${m.name} (${m.studentId}) · ${m.mobile || "No mobile"}`));
       }
     });
     const unallocated = allocations.filter(a => !projectAllocations[a.studentId]);
     if (unallocated.length) {
       lines.push("");
       lines.push("Unallocated");
-      unallocated.forEach(m => lines.push(`- ${m.name} (${m.studentId})`));
+      unallocated.forEach(m => lines.push(`- ${m.name} (${m.studentId}) · ${m.mobile || "No mobile"}`));
     }
     return lines.join("\n");
   };
@@ -1039,7 +1114,6 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
               const members = getStudentsForProject(p.id);
               const filled = members.length;
               const empty = Math.max(0, p.slots - filled);
-              const anchor = getAnchor(members);
               const projectAvgAvail = members.length
                 ? Math.round(members.reduce((s, a) => s + availPct(a), 0) / members.length)
                 : null;
@@ -1054,11 +1128,6 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
                   <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <div style={{ fontSize: 15, fontWeight: 500 }}>{p.name}</div>
-                      {anchor && (
-                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "#FFF7ED", color: "#C2620A", fontWeight: 500 }}>
-                          Lead: {anchor.name.split(" ")[0]}
-                        </span>
-                      )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                       {projectAvgAvail !== null && (
@@ -1086,8 +1155,6 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
                   <div>
                     {members.map((a, idx) => {
                       const pref = prefLabel(a, p.id);
-                      const rs = roleStyle(a.role);
-                      const isAnchor = anchor && a.studentId === anchor.studentId;
                       const pct = availPct(a);
                       return (
                         <div
@@ -1096,17 +1163,12 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
                             padding: "11px 20px",
                             borderBottom: idx < members.length - 1 || empty > 0 ? "1px solid var(--border)" : "none",
                             display: "flex", alignItems: "center", gap: 12,
-                            background: isAnchor ? "#FAFDF9" : "transparent",
                           }}
                         >
-                          {/* Anchor marker */}
-                          <div style={{ width: 4, height: 4, borderRadius: "50%", background: isAnchor ? "var(--accent)" : "transparent", flexShrink: 0 }} />
-
                           <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ fontSize: 13, fontWeight: isAnchor ? 500 : 400 }}>{a.name}</span>
-                            {isAnchor && <span style={{ fontSize: 11, color: "var(--accent-muted)", marginLeft: 6 }}>anchor</span>}
+                            <span style={{ fontSize: 13 }}>{a.name}</span>
                             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                              {allocationNote(a, p.id, isAnchor)}
+                              {allocationNote(a, p.id)}
                             </span>
                             <select
                               value={projectAllocations[a.studentId] || ""}
@@ -1127,11 +1189,6 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
                               <div style={{ width: `${pct}%`, height: "100%", background: "var(--accent)", borderRadius: 2 }} />
                             </div>
                           </div>
-
-                          {/* Role badge */}
-                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: rs.bg, color: rs.color, fontWeight: 500, flexShrink: 0 }}>
-                            {a.role}
-                          </span>
 
                           {/* Preference badge */}
                           <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: pref.bg, color: pref.color, fontWeight: 500, flexShrink: 0 }}>
@@ -1172,7 +1229,7 @@ function AllocationsPanel({ allocations, projectAllocations, projects, onRun, on
 
           {/* Legend */}
           <div style={{ marginTop: 20, padding: "12px 16px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, display: "flex", gap: 20, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>● anchor = most experienced + available student in that project</span>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sector match = student pitched a stock in this sector</span>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Choice # = student's original preference rank · Fallback = placed outside ranked choices</span>
           </div>
         </>
@@ -1190,7 +1247,7 @@ function ProjectsPanel({ projects, onSave }) {
   };
 
   const addProject = () => {
-    onSave([...projects, { id: uuid(), name: "New Project", description: "Project description.", slots: 2 }]);
+    onSave([...projects, { id: uuid(), name: "New Project", description: "Project description.", slots: 2, sector: "" }]);
   };
 
   return (
@@ -1228,6 +1285,20 @@ function ProjectsPanel({ projects, onSave }) {
                     style={{ fontSize: 13, color: "var(--text-muted)", cursor: "text", padding: "2px 0" }}
                     title="Click to edit"
                   >{p.description}</div>
+                )}
+                {editing[`${p.id}-sector`] ? (
+                  <input
+                    autoFocus
+                    defaultValue={p.sector || ""}
+                    onBlur={e => { updateProject(p.id, "sector", e.target.value); setEditing(prev => ({ ...prev, [`${p.id}-sector`]: false })); }}
+                    style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}
+                  />
+                ) : (
+                  <div
+                    onClick={() => setEditing(prev => ({ ...prev, [`${p.id}-sector`]: true }))}
+                    style={{ fontSize: 12, color: "var(--text-muted)", cursor: "text", padding: "2px 0", marginTop: 4 }}
+                    title="Click to edit"
+                  >{p.sector ? `Sector: ${p.sector}` : "Sector: Not set"}</div>
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -1314,6 +1385,7 @@ export default function App() {
           if (supabase) await supabase.auth.signOut();
           setAdminAuth(false);
           setView("student");
+          window.location.href = "/";
         }}
       />
     );
