@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
+import logoUrl from "./src/SoFI Black Logo (Light Theme)-B3FKSLl0.svg";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function uuid() {
@@ -262,10 +263,18 @@ function StudentForm({ onAdminLink }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", padding: "48px 24px 80px", position: "relative" }}>
+      <img
+        src={logoUrl}
+        alt="SoFI"
+        style={{ position: "absolute", top: 18, left: 20, height: 28, width: "auto" }}
+      />
       <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 32 }}>
         {/* Header */}
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 300, color: "var(--text-primary)" }}>Summer Allocations</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <img src={logoUrl} alt="SoFI" style={{ height: 24, width: "auto" }} />
+            <h1 style={{ fontSize: 24, fontWeight: 300, color: "var(--text-primary)" }}>Summer Allocations</h1>
+          </div>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6 }}>Submit your availability and project preferences.</p>
         </div>
 
