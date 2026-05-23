@@ -272,7 +272,6 @@ function StudentForm({ onAdminLink }) {
         {/* Header */}
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={logoUrl} alt="SoFI" style={{ height: 24, width: "auto" }} />
             <h1 style={{ fontSize: 24, fontWeight: 300, color: "var(--text-primary)" }}>Summer Allocations</h1>
           </div>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6 }}>Submit your availability and project preferences.</p>
