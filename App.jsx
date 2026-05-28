@@ -32,10 +32,10 @@ async function isAdminUser(user) {
 
 const DEFAULT_PROJECTS = [
   { id: "p1", name: "Centricity-Wealth Management platform", description: " ", slots: 3, sector: "Wealth Management" },
-  { id: "p2", name: "ER 1", description: " ", slots: 2, sector: "Industrials" },
-  { id: "p3", name: "ER 2", description: " ", slots: 2, sector: "Technology" },
-  { id: "p4", name: "ER 3", description: " ", slots: 3, sector: "Healthcare" },
-  { id: "p5", name: "ER 4", description: " ", slots: 2, sector: "Consumer" },
+  { id: "p2", name: "Backend API- Modification", description: " ", slots: 6, sector: "Backend" },
+  { id: "p3", name: "SoFI-Website", description: " ", slots: 2, sector: "Design" },
+  { id: "p4", name: "Merch Design", description: " ", slots: 3, sector: "Design" },
+  { id: "p5", name: "Client Acquisition+Brochure", description: " ", slots: 2, sector: "Marketing" },
 ];
 
 function getLS(key, fallback) {
