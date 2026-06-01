@@ -80,58 +80,64 @@ function dbToApplicant(row) {
 
 async function dbGetProjects() {
   if (!supabase) return DEFAULT_PROJECTS;
-  const { data, error } = await supabase.from("projects").select("*").order("id");
-  if (error || !data || !data.length) return DEFAULT_PROJECTS;
-  return data;
+  try {
+    const { data, error } = await supabase.from("projects").select("*").order("id");
+    if (error || !data || !data.length) return DEFAULT_PROJECTS;
+    return data;
+  } catch { return DEFAULT_PROJECTS; }
 }
 
 async function dbSaveProjects(projectsList) {
   if (!supabase) return;
-  const rows = projectsList.map(p => ({ ...p }));
-  // Clear and re-insert to keep in sync (avoids stale orphans)
-  await supabase.from("projects").delete().neq("id", "___");
-  if (rows.length) await supabase.from("projects").insert(rows);
+  try {
+    const rows = projectsList.map(p => ({ ...p }));
+    await supabase.from("projects").delete().neq("id", "___");
+    if (rows.length) await supabase.from("projects").insert(rows);
+  } catch { /* silently ignore — UI already updated */ }
 }
 
 async function dbGetApplicants() {
   if (!supabase) return [];
-  const { data, error } = await supabase.from("applicants").select("*");
-  if (error) return [];
-  return (data || []).map(dbToApplicant);
+  try {
+    const { data, error } = await supabase.from("applicants").select("*");
+    if (error) return [];
+    return (data || []).map(dbToApplicant);
+  } catch { return []; }
 }
 
 async function dbAddApplicant(entry) {
   if (!supabase) return;
-  await supabase.from("applicants").insert(applicantToDb(entry));
-}
-
-async function dbDeleteApplicant(studentId) {
-  if (!supabase) return;
-  await supabase.from("applicants").delete().eq("student_id", studentId);
+  try { await supabase.from("applicants").insert(applicantToDb(entry)); } catch { /* ignore */ }
 }
 
 async function dbGetAllocations() {
   if (!supabase) return {};
-  const { data, error } = await supabase.from("project_allocations").select("*");
-  if (error || !data) return {};
-  const result = {};
-  data.forEach(row => { result[row.student_id] = row.project_id; });
-  return result;
+  try {
+    const { data, error } = await supabase.from("project_allocations").select("*");
+    if (error || !data) return {};
+    const result = {};
+    data.forEach(row => { result[row.student_id] = row.project_id; });
+    return result;
+  } catch { return {}; }
 }
 
 async function dbSaveAllAllocations(allocationsMap) {
   if (!supabase) return;
-  await supabase.from("project_allocations").delete().neq("student_id", "___");
-  const rows = Object.entries(allocationsMap).map(([student_id, project_id]) => ({ student_id, project_id }));
-  if (rows.length) await supabase.from("project_allocations").insert(rows);
+  try {
+    await supabase.from("project_allocations").delete().neq("student_id", "___");
+    const rows = Object.entries(allocationsMap).map(([student_id, project_id]) => ({ student_id, project_id }));
+    if (rows.length) await supabase.from("project_allocations").insert(rows);
+  } catch { /* ignore */ }
 }
 
 async function dbMoveStudentAlloc(studentId, projectId) {
   if (!supabase) return;
-  await supabase.from("project_allocations").delete().eq("student_id", studentId);
-  if (projectId) {
-    await supabase.from("project_allocations").insert({ student_id: studentId, project_id: projectId });
-  }
+  try {
+    await supabase.from("project_allocations").delete().eq("student_id", studentId);
+    if (projectId) {
+      await supabase.from("project_allocations").insert({ student_id: studentId, project_id: projectId });
+    }
+  } catch { /* ignore */ }
 }
 
 function dateRanges(dates) {
@@ -286,7 +292,7 @@ function StudentForm({ onAdminLink }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    dbGetProjects().then(projs => { setProjects(projs); setLoading(false); });
+    dbGetProjects().then(projs => { setProjects(projs); }).finally(() => { setLoading(false); });
   }, []);
 
   const sectorOptions = [...new Set(projects.map(p => p.sector).filter(Boolean))];
@@ -667,7 +673,7 @@ function AdminDashboard({ onSignOut }) {
     setProjects(projs);
   };
 
-  useEffect(() => { refreshData().then(() => setDbLoading(false)); }, []);
+  useEffect(() => { refreshData().finally(() => setDbLoading(false)); }, []);
 
   useEffect(() => { if (!dbLoading) refreshData(); }, [panel]);
 
