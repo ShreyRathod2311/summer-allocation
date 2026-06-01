@@ -38,14 +38,100 @@ const DEFAULT_PROJECTS = [
   { id: "p5", name: "Client Acquisition+Brochure", description: " ", slots: 2, sector: "Marketing" },
 ];
 
-function getLS(key, fallback) {
-  try {
-    const v = localStorage.getItem(key);
-    return v ? JSON.parse(v) : fallback;
-  } catch { return fallback; }
+// ── Supabase Database Helpers (replace localStorage) ──────────────────────────
+
+function applicantToDb(a) {
+  return {
+    id: a.id,
+    name: a.name,
+    student_id: a.studentId,
+    email: a.email,
+    mobile: a.mobile,
+    leave_days: a.leaveDays,
+    contributions: a.contributions,
+    pitched_before: a.pitchedBefore,
+    pitch_notes: a.pitchNotes || "",
+    pitched_sectors: a.pitchedSectors,
+    preferences: a.preferences,
+    availability_note: a.availabilityNote || "",
+    avg_availability: (TOTAL_VACATION_DAYS - a.leaveDays.length) / TOTAL_VACATION_DAYS,
+    submitted_at: a.submittedAt,
+  };
 }
-function setLS(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+
+function dbToApplicant(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    studentId: row.student_id,
+    email: row.email,
+    mobile: row.mobile,
+    leaveDays: row.leave_days || [],
+    contributions: row.contributions || "",
+    pitchedBefore: row.pitched_before || false,
+    pitchNotes: row.pitch_notes || "",
+    pitchedSectors: row.pitched_sectors || [],
+    preferences: row.preferences || [],
+    availabilityNote: row.availability_note || "",
+    avgAvailability: row.avg_availability,
+    submittedAt: row.submitted_at,
+  };
+}
+
+async function dbGetProjects() {
+  if (!supabase) return DEFAULT_PROJECTS;
+  const { data, error } = await supabase.from("projects").select("*").order("id");
+  if (error || !data || !data.length) return DEFAULT_PROJECTS;
+  return data;
+}
+
+async function dbSaveProjects(projectsList) {
+  if (!supabase) return;
+  const rows = projectsList.map(p => ({ ...p }));
+  // Clear and re-insert to keep in sync (avoids stale orphans)
+  await supabase.from("projects").delete().neq("id", "___");
+  if (rows.length) await supabase.from("projects").insert(rows);
+}
+
+async function dbGetApplicants() {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("applicants").select("*");
+  if (error) return [];
+  return (data || []).map(dbToApplicant);
+}
+
+async function dbAddApplicant(entry) {
+  if (!supabase) return;
+  await supabase.from("applicants").insert(applicantToDb(entry));
+}
+
+async function dbDeleteApplicant(studentId) {
+  if (!supabase) return;
+  await supabase.from("applicants").delete().eq("student_id", studentId);
+}
+
+async function dbGetAllocations() {
+  if (!supabase) return {};
+  const { data, error } = await supabase.from("project_allocations").select("*");
+  if (error || !data) return {};
+  const result = {};
+  data.forEach(row => { result[row.student_id] = row.project_id; });
+  return result;
+}
+
+async function dbSaveAllAllocations(allocationsMap) {
+  if (!supabase) return;
+  await supabase.from("project_allocations").delete().neq("student_id", "___");
+  const rows = Object.entries(allocationsMap).map(([student_id, project_id]) => ({ student_id, project_id }));
+  if (rows.length) await supabase.from("project_allocations").insert(rows);
+}
+
+async function dbMoveStudentAlloc(studentId, projectId) {
+  if (!supabase) return;
+  await supabase.from("project_allocations").delete().eq("student_id", studentId);
+  if (projectId) {
+    await supabase.from("project_allocations").insert({ student_id: studentId, project_id: projectId });
+  }
 }
 
 function dateRanges(dates) {
@@ -195,8 +281,14 @@ function StudentForm({ onAdminLink }) {
   const [availNote, setAvailNote] = useState("");
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [projects, setProjects] = useState(DEFAULT_PROJECTS);
+  const [loading, setLoading] = useState(true);
 
-  const projects = getLS("projects", DEFAULT_PROJECTS);
+  useEffect(() => {
+    dbGetProjects().then(projs => { setProjects(projs); setLoading(false); });
+  }, []);
+
   const sectorOptions = [...new Set(projects.map(p => p.sector).filter(Boolean))];
 
   const toggleLeave = (iso) => {
@@ -231,25 +323,37 @@ function StudentForm({ onAdminLink }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    const prefs = Object.entries(preferences)
-      .map(([projectId, rank]) => ({ projectId, rank }))
-      .sort((a, b) => a.rank - b.rank);
-    const entry = {
-      id: uuid(), name: name.trim(), studentId: studentId.trim(), email: email.trim(), mobile: mobile.trim(),
-      leaveDays, contributions: contributions.trim(),
-      pitchedBefore,
-      pitchNotes: pitchNotes.trim(),
-      pitchedSectors,
-      preferences: prefs, availabilityNote: availNote.trim(),
-      submittedAt: new Date().toISOString(),
-    };
-    const existing = getLS("allocations", []);
-    setLS("allocations", [...existing, entry]);
-    setSubmitted(true);
+    setSubmitting(true);
+    try {
+      const prefs = Object.entries(preferences)
+        .map(([projectId, rank]) => ({ projectId, rank }))
+        .sort((a, b) => a.rank - b.rank);
+      const entry = {
+        id: uuid(), name: name.trim(), studentId: studentId.trim(), email: email.trim(), mobile: mobile.trim(),
+        leaveDays, contributions: contributions.trim(),
+        pitchedBefore,
+        pitchNotes: pitchNotes.trim(),
+        pitchedSectors,
+        preferences: prefs, availabilityNote: availNote.trim(),
+        submittedAt: new Date().toISOString(),
+      };
+      await dbAddApplicant(entry);
+      setSubmitted(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", gap: 12, padding: 24 }}>
+        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading...</div>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -457,14 +561,16 @@ function StudentForm({ onAdminLink }) {
         {/* Submit */}
         <button
           onClick={handleSubmit}
+          disabled={submitting}
           style={{
             width: "100%", height: 48, background: "var(--accent)", color: "#fff",
             fontSize: 15, fontWeight: 500, borderRadius: 8, transition: "opacity 0.15s",
+            opacity: submitting ? 0.7 : 1,
           }}
-          onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
-          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+          onMouseEnter={e => { if (!submitting) e.currentTarget.style.opacity = "0.88"; }}
+          onMouseLeave={e => { if (!submitting) e.currentTarget.style.opacity = "1"; }}
         >
-          Submit Application
+          {submitting ? "Submitting..." : "Submit Application"}
         </button>
       </div>
 
@@ -545,28 +651,36 @@ function AdminLogin({ onSuccess, onBack }) {
 // ── Admin Dashboard ───────────────────────────────────────────────────────────
 function AdminDashboard({ onSignOut }) {
   const [panel, setPanel] = useState("Overview");
-  const [allocations, setAllocations] = useState(() => getLS("allocations", []));
-  const [projectAllocations, setProjectAllocations] = useState(() => getLS("projectAllocations", {}));
-  const [projects, setProjects] = useState(() => getLS("projects", DEFAULT_PROJECTS));
+  const [allocations, setAllocations] = useState([]);
+  const [projectAllocations, setProjectAllocations] = useState({});
+  const [projects, setProjects] = useState(DEFAULT_PROJECTS);
+  const [dbLoading, setDbLoading] = useState(true);
 
-  const refreshData = () => {
-    setAllocations(getLS("allocations", []));
-    setProjectAllocations(getLS("projectAllocations", {}));
-    setProjects(getLS("projects", DEFAULT_PROJECTS));
+  const refreshData = async () => {
+    const [apps, allocs, projs] = await Promise.all([
+      dbGetApplicants(),
+      dbGetAllocations(),
+      dbGetProjects(),
+    ]);
+    setAllocations(apps);
+    setProjectAllocations(allocs);
+    setProjects(projs);
   };
 
-  useEffect(() => { refreshData(); }, [panel]);
+  useEffect(() => { refreshData().then(() => setDbLoading(false)); }, []);
 
-  const saveProjects = (updated) => {
+  useEffect(() => { if (!dbLoading) refreshData(); }, [panel]);
+
+  const saveProjects = async (updated) => {
     setProjects(updated);
-    setLS("projects", updated);
+    await dbSaveProjects(updated);
   };
 
-  const moveStudent = (studentId, projectId) => {
+  const moveStudent = async (studentId, projectId) => {
     const next = { ...projectAllocations };
     if (!projectId) delete next[studentId];
     else next[studentId] = projectId;
-    setLS("projectAllocations", next);
+    await dbMoveStudentAlloc(studentId, projectId);
     setProjectAllocations(next);
   };
 
@@ -717,14 +831,19 @@ function AdminDashboard({ onSignOut }) {
       allocate(student, openProjects[0].id);
     }
 
-    setLS("projectAllocations", newAlloc);
     setProjectAllocations(newAlloc);
+    dbSaveAllAllocations(newAlloc);
   };
 
   const navItems = ["Overview", "Students", "Allocations", "Projects"];
 
   return (
     <div className="admin-layout" style={{ display: "flex", minHeight: "100vh" }}>
+      {dbLoading && (
+        <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", zIndex: 100 }}>
+          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading data...</div>
+        </div>
+      )}
       {/* Sidebar */}
       <div className="sidebar" style={{
         width: 240, background: "var(--surface)", borderRight: "1px solid var(--border)",
